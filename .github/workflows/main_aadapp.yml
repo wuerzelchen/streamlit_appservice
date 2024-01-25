@@ -16,7 +16,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python version
         uses: actions/setup-python@v1
         with:
@@ -57,6 +56,10 @@ jobs:
 
       - name: Unzip artifact for deployment
         run: unzip release.zip
+      
+      - uses: azure/login@v1
+        with:
+          creds: ${{ secrets.SERVICE_PRINCIPAL }}
 
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v2
@@ -64,4 +67,4 @@ jobs:
         with:
           app-name: 'aadapp'
           slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_30EA101279BD471BB541E8A50BD3D1EC }}
+          #publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_30EA101279BD471BB541E8A50BD3D1EC }}
