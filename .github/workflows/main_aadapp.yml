@@ -59,7 +59,7 @@ jobs:
       
       - uses: azure/login@v1
         with:
-          creds: ${{ secrets.SERVICE_PRINCIPAL }}
+          creds: ${{ secrets.SERVICE_PROINCIPAL }}
 
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v2
