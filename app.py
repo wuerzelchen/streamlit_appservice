@@ -9,7 +9,7 @@ clientId = os.getenv("CLIENT_ID")
 tenantId = os.getenv("TENANT_ID")
 # Main Page with title "Welcome to AAD Demo"
 st.title('Welcome to AAD Demo')
-
+st.write(clientId)
 with st.sidebar:
   login_token = msal_authentication(
     auth={
