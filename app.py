@@ -34,4 +34,7 @@ with st.sidebar:
 )
 
 st.sidebar.header("Welcome")
-st.sidebar.caption(login_token["idTokenClaims"]["name"])
+# check if login_token is not None and if login_token["idTokenClaims"] is not None
+if login_token and login_token["idTokenClaims"]:
+  # display the name of the user
+    st.sidebar.caption(login_token["idTokenClaims"]["name"])
