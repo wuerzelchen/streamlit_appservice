@@ -1,3 +1,8 @@
 msal-streamlit-authentication
 python-dotenv
 streamlit
+
+pyodbc
+uvicorn[standard]
+pydantic
+azure-identity
