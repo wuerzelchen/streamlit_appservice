@@ -121,6 +121,7 @@ def update_person(person_id: int, item: Person):
 
 # Main Page with title "Welcome to AAD Demo"
 st.title('Welcome to AAD Demo')
+st.info('Work in progress. Not working yet.')
 if st.button('Create User'):
     # if not login_token:
     #    st.error("Please login to create a user")
