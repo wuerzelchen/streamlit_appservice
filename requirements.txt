@@ -6,3 +6,4 @@ pyodbc
 uvicorn[standard]
 pydantic
 azure-identity
+azure-keyvault

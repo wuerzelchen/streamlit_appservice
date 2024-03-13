@@ -1,8 +1,10 @@
+from azure.keyvault.secrets import SecretClient
 import struct
 import pyodbc
 from pydantic import BaseModel
 from typing import Union
 from azure import identity
+from azure.identity import AuthenticationRequiredError, InteractiveBrowserCredential
 import streamlit as st
 from msal_streamlit_authentication import msal_authentication
 import os
@@ -11,6 +13,8 @@ import pandas as pd
 load_dotenv()
 
 os.environ["AZURE_TENANT_ID"] = "16b3c013-d300-468d-ac64-7eda0820b6d3"
+os.environ["AZURE_CLIENT_ID"] = os.getenv("CLIENT_ID")
+VAULT_URL = "https://asdf234.vault.azure.net/"
 
 
 class Person(BaseModel):
@@ -88,10 +92,17 @@ def create_person(item: Person):
 
 
 def get_conn():
-    credential = identity.DefaultAzureCredential(
-        exclude_interactive_browser_credential=False)
-    token_string = credential.get_token(
-        "https://database.windows.net/.default", tenant_id=tenantId).token
+    credential = identity.InteractiveBrowserCredential(
+        tenant_id=tenantId, disable_automatic_authentication=True)
+    try:
+
+        token_string = credential.get_token(
+            ".default", tenant_id=tenantId).token
+    except AuthenticationRequiredError as ex:
+        credential.authenticate(
+            scopes=ex.scopes, claims=ex.claims)
+        token_string = credential.get_token(
+            "https://database.windows.net/.default", tenant_id=tenantId).token
     token_bytes = token_string.encode('UTF-16LE')
     # token_bytes = b""
     # for i in token_string:
@@ -121,16 +132,33 @@ def update_person(person_id: int, item: Person):
 
 # Main Page with title "Welcome to AAD Demo"
 st.title('Welcome to AAD Demo')
+if st.button('Get Keyvault'):
+    credential = InteractiveBrowserCredential(
+        disable_automatic_authentication=True, tenant_id=tenantId)
+    client = SecretClient(VAULT_URL, credential)
+
+    try:
+        secret_names = [s.name for s in client.list_properties_of_secrets()]
+    except AuthenticationRequiredError as ex:
+        # Interactive authentication is necessary to authorize the client's request. The exception carries the
+        # requested authentication scopes as well as any additional claims the service requires. If you pass
+        # both to 'authenticate', it will cache an access token for the necessary scopes.
+        credential.authenticate(scopes=ex.scopes, claims=ex.claims)
+
+    # the client operation should now succeed
+    secret_names = [s.name for s in client.list_properties_of_secrets()]
+    st.write(secret_names)
+
 if st.button('Create User'):
     # if not login_token:
     #    st.error("Please login to create a user")
     # else:
-    conn = get_conn()
+    # conn = get_conn()
     create_person(Person(first_name="John", last_name="Doe"))
 
-persons = get_persons()
-st.dataframe(persons, hide_index=True, use_container_width=True,
-             column_order=["First Name", "Last Name"])
+# persons = get_persons()
+# st.dataframe(persons, hide_index=True, use_container_width=True,
+#             column_order=["First Name", "Last Name"])
 
 st.sidebar.header("Welcome")
 # check if login_token is not None and if login_token["idTokenClaims"] is not None
