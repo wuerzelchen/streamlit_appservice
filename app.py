@@ -92,17 +92,17 @@ def create_person(item: Person):
 
 
 def get_conn():
-    credential = identity.InteractiveBrowserCredential(
-        tenant_id=tenantId, disable_automatic_authentication=True)
+    db_scope = "https://database.windows.net/.default"
+    credential = identity.InteractiveBrowserCredential(client_id=clientId,
+                                                       tenant_id=tenantId, disable_automatic_authentication=True)
     try:
-
         token_string = credential.get_token(
-            ".default", tenant_id=tenantId).token
+            db_scope).token
     except AuthenticationRequiredError as ex:
         credential.authenticate(
             scopes=ex.scopes, claims=ex.claims)
         token_string = credential.get_token(
-            "https://database.windows.net/.default", tenant_id=tenantId).token
+            scopes=db_scope).token
     token_bytes = token_string.encode('UTF-16LE')
     # token_bytes = b""
     # for i in token_string:
@@ -134,7 +134,7 @@ def update_person(person_id: int, item: Person):
 st.title('Welcome to AAD Demo')
 if st.button('Get Keyvault'):
     credential = InteractiveBrowserCredential(
-        disable_automatic_authentication=True, tenant_id=tenantId)
+        disable_automatic_authentication=True, tenant_id=tenantId, client_id=clientId)
     client = SecretClient(VAULT_URL, credential)
 
     try:
@@ -144,9 +144,9 @@ if st.button('Get Keyvault'):
         # requested authentication scopes as well as any additional claims the service requires. If you pass
         # both to 'authenticate', it will cache an access token for the necessary scopes.
         credential.authenticate(scopes=ex.scopes, claims=ex.claims)
+        # the client operation should now succeed
+        secret_names = [s.name for s in client.list_properties_of_secrets()]
 
-    # the client operation should now succeed
-    secret_names = [s.name for s in client.list_properties_of_secrets()]
     st.write(secret_names)
 
 if st.button('Create User'):
