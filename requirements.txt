@@ -2,8 +2,7 @@ msal-streamlit-authentication
 python-dotenv
 streamlit
 
-pyodbc # sql server
-psycopg2 # postgresql
+psycopg2-binary # postgresql
 
 uvicorn[standard]
 pydantic

@@ -1,10 +1,10 @@
 from azure.keyvault.secrets import SecretClient
 import struct
-import pyodbc
+import psycopg2
 from pydantic import BaseModel
 from typing import Union
 from azure import identity
-from azure.identity import AuthenticationRequiredError, InteractiveBrowserCredential
+from azure.identity import AuthenticationRequiredError, InteractiveBrowserCredential, OnBehalfOfCredential
 import streamlit as st
 from msal_streamlit_authentication import msal_authentication
 import os
@@ -12,8 +12,24 @@ from dotenv import load_dotenv
 import pandas as pd
 load_dotenv()
 
-os.environ["AZURE_TENANT_ID"] = "16b3c013-d300-468d-ac64-7eda0820b6d3"
-os.environ["AZURE_CLIENT_ID"] = os.getenv("CLIENT_ID")
+# constant string for database endpoint
+DATABASE_ENDPOINT = os.getenv("DATABASE_ENDPOINT")
+DATABASE = os.getenv("DATABASE")
+
+# constant string for scope
+DB_SCOPE = os.getenv("DB_SCOPE")
+LOGIN_SCOPE = os.getenv("LOGIN_SCOPE")
+
+# auth information
+TENANT_ID = os.getenv("AZURE_TENANT_ID")
+
+# auth information web
+CLIENT_ID = os.getenv("CLIENT_ID")
+
+# auth information api
+API_CLIENT_ID = os.getenv("API_CLIENT_ID")
+API_CLIENT_SECRET = os.getenv("API_CLIENT_SECRET")
+
 VAULT_URL = "https://asdf234.vault.azure.net/"
 
 
@@ -22,14 +38,12 @@ class Person(BaseModel):
     last_name: Union[str, None] = None
 
 
-clientId = os.getenv("CLIENT_ID")
-tenantId = os.getenv("AZURE_TENANT_ID")
 login_token = None
 with st.sidebar:
     login_token = msal_authentication(
         auth={
-            "clientId": f"{clientId}",
-            "authority": f"https://login.microsoftonline.com/{tenantId}",
+            "clientId": CLIENT_ID,
+            "authority": f"https://login.microsoftonline.com/{TENANT_ID}",
             "redirectUri": "/",
             "postLogoutRedirectUri": "/"
         },  # Corresponds to the 'auth' configuration for an MSAL Instance
@@ -38,7 +52,7 @@ with st.sidebar:
             "storeAuthStateInCookie": False
         },  # Corresponds to the 'cache' configuration for an MSAL Instance
         login_request={
-            "scopes": [".default"]
+            "scopes": [LOGIN_SCOPE]
         },  # Optional
         logout_request={},  # Optional
         login_button_text="Login",  # Optional, defaults to "Login"
@@ -50,19 +64,11 @@ with st.sidebar:
         key=1  # Optional if only a single instance is needed
     )
 
-connection_string = None
-# get connection string from environment variable if set
-if "AZURE_SQL_CONNECTIONSTRING" in os.environ:
-    connection_string = os.environ["AZURE_SQL_CONNECTIONSTRING"]
-# set if connection_string is not set
-if not connection_string:
-    connection_string = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:sqlstreamlit.database.windows.net,1433;Database=streamlitdb;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30"
-
 
 def get_person(person_id: int):
     with get_conn() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Persons WHERE ID = ?", person_id)
+        cursor.execute("SELECT * FROM Peoples WHERE ID = ?", person_id)
 
         row = cursor.fetchone()
         return f"{row.ID}, {row.FirstName}, {row.LastName}"
@@ -72,29 +78,36 @@ def get_persons():
     data = []
     with get_conn() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Persons")
+        cursor.execute("SELECT * FROM Peoples")
 
         for row in cursor.fetchall():
-            data.append({"ID": row.ID, "First Name": row.FirstName,
-                        "Last Name": row.LastName})
+            data.append({"First Name": row[0],
+                        "Last Name": row[1]})
 
     return pd.DataFrame(data)
 
 
 def create_person(item: Person):
     with get_conn() as conn:
-        cursor = conn.cursor()
-        cursor.execute(f"INSERT INTO Persons (FirstName, LastName) VALUES (?, ?)",
-                       item.first_name, item.last_name)
-        conn.commit()
+        try:
+            cursor = conn.cursor()
+            sql_statement = f"INSERT INTO Peoples (FirstName, LastName) VALUES ('{
+                item.first_name}', '{item.last_name}')"
+            cursor.execute(sql_statement)
+            conn.commit()
+        except Exception as e:
+            st.error(f"Error creating person: {item.first_name}, {
+                     item.last_name}. Error: {str(e)}")
 
     return item
 
 
 def get_conn():
-    db_scope = "https://database.windows.net/.default"
-    credential = identity.InteractiveBrowserCredential(client_id=clientId,
-                                                       tenant_id=tenantId, disable_automatic_authentication=True)
+
+    db_scope = DB_SCOPE
+    credential = identity.OnBehalfOfCredential(client_id=API_CLIENT_ID,
+                                               tenant_id=TENANT_ID, client_secret=API_CLIENT_SECRET,
+                                               user_assertion=login_token["accessToken"])
     try:
         token_string = credential.get_token(
             db_scope).token
@@ -103,20 +116,16 @@ def get_conn():
             scopes=ex.scopes, claims=ex.claims)
         token_string = credential.get_token(
             scopes=db_scope).token
-    token_bytes = token_string.encode('UTF-16LE')
-    # token_bytes = b""
-    # for i in token_string:
-    #  token_bytes += bytes({i});
-    #  token_bytes += bytes(1);
-    # token_struct = struct.pack("=i", len(token_bytes)) + token_bytes;
-    token_struct = struct.pack(
-        f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
-    # token_bytes = credential.get_token("https://database.windows.net/.default").token.encode("UTF-16-LE")
-    # token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
-    # This connection option is defined by microsoft in msodbcsql.h
-    SQL_COPT_SS_ACCESS_TOKEN = 1256
-    conn = pyodbc.connect(connection_string, attrs_before={
-                          SQL_COPT_SS_ACCESS_TOKEN: token_struct})
+    except Exception as e:
+
+        st.error("Error acquiring token:" + str(e))
+    # try and catch database connection
+    try:
+        conn = psycopg2.connect(user=f"{login_token['account']['username']}",
+                                password=f"{token_string}", host=f"{DATABASE_ENDPOINT}", port=5432, database=f"{DATABASE}")
+    except Exception as e:
+        st.error("Error connecting to database")
+        st.error(e)
     return conn
 
 
@@ -132,23 +141,6 @@ def update_person(person_id: int, item: Person):
 
 # Main Page with title "Welcome to AAD Demo"
 st.title('Welcome to AAD Demo')
-if st.button('Get Keyvault'):
-    credential = InteractiveBrowserCredential(
-        disable_automatic_authentication=True, tenant_id=tenantId, client_id=clientId)
-    client = SecretClient(VAULT_URL, credential)
-
-    try:
-        secret_names = [s.name for s in client.list_properties_of_secrets()]
-    except AuthenticationRequiredError as ex:
-        # Interactive authentication is necessary to authorize the client's request. The exception carries the
-        # requested authentication scopes as well as any additional claims the service requires. If you pass
-        # both to 'authenticate', it will cache an access token for the necessary scopes.
-        credential.authenticate(scopes=ex.scopes, claims=ex.claims)
-        # the client operation should now succeed
-        secret_names = [s.name for s in client.list_properties_of_secrets()]
-
-    st.write(secret_names)
-
 if st.button('Create User'):
     # if not login_token:
     #    st.error("Please login to create a user")
@@ -156,12 +148,15 @@ if st.button('Create User'):
     # conn = get_conn()
     create_person(Person(first_name="John", last_name="Doe"))
 
-# persons = get_persons()
-# st.dataframe(persons, hide_index=True, use_container_width=True,
-#             column_order=["First Name", "Last Name"])
+if login_token:
+    persons = get_persons()
+    st.dataframe(persons, hide_index=True, use_container_width=True,
+                 column_order=["First Name", "Last Name"])
 
 st.sidebar.header("Welcome")
 # check if login_token is not None and if login_token["idTokenClaims"] is not None
 if login_token and login_token["idTokenClaims"]:
     # display the name of the user
     st.sidebar.caption(login_token["idTokenClaims"]["name"])
+
+st.write("Login Token", login_token)
