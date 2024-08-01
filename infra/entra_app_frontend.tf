@@ -45,6 +45,6 @@ resource "azuread_application" "appreg_frontend" {
   }
 
   single_page_application {
-    redirect_uris = ["http://localhost:5005/"]
+    redirect_uris = ["http://localhost:5005/", "https://slentra.livelyhill-6cbc2781.francecentral.azurecontainerapps.io/"]
   }
 }
