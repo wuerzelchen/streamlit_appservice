@@ -1,8 +1,8 @@
 #postgres flexible server
 resource "azurerm_postgresql_flexible_server" "pg" {
   name                          = "pg-${local.projectname}-${random_id.suffix.hex}"
-  resource_group_name           = azurerm_resource_group.rg.name
-  location                      = azurerm_resource_group.rg.location
+  resource_group_name           = data.azurerm_resource_group.rg.name
+  location                      = data.azurerm_resource_group.rg.location
   sku_name                      = "B_Standard_B1ms"
   storage_mb                    = 32768
   version                       = "15"
@@ -16,15 +16,13 @@ resource "azurerm_postgresql_flexible_server" "pg" {
     password_auth_enabled         = false
     tenant_id                     = data.azurerm_client_config.current.tenant_id
   }
-  tags = {
-    environment = "dev"
-  }
+  tags = var.tags
 }
 
 #postgres flexible server entra id admin
 resource "azurerm_postgresql_flexible_server_active_directory_administrator" "admin" {
   server_name         = azurerm_postgresql_flexible_server.pg.name
-  resource_group_name = azurerm_resource_group.rg.name
+  resource_group_name = data.azurerm_resource_group.rg.name
   tenant_id           = data.azurerm_client_config.current.tenant_id
   object_id           = data.azurerm_client_config.current.object_id
   principal_name      = "admin@MngEnvMCAP953636.onmicrosoft.com"

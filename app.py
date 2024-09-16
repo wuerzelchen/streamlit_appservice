@@ -104,6 +104,7 @@ def create_person(item: Person):
 
 def get_conn():
 
+    conn = None
     db_scope = DB_SCOPE
     credential = identity.OnBehalfOfCredential(client_id=API_CLIENT_ID,
                                                tenant_id=TENANT_ID, client_secret=API_CLIENT_SECRET,
